@@ -8,9 +8,7 @@
 
 A dual-core MJPEG player for a 360×360 ST77916 QSPI round display and the ESP32-S3 N16R8. Depending on video size and available PSRAM, it either caches the whole compressed video in PSRAM or caches a prefix and reads the remaining frames from LittleFS.
 
-<p align="center">
-  <img width="1125" height="2436" alt="IMG_4B28A8A888C6-1" src="https://github.com/user-attachments/assets/167366d6-ce5e-472c-98b3-b08c90e7feaa" />
-</p>
+<img width="1125" height="2436" alt="IMG_4B28A8A888C6-1" src="https://github.com/user-attachments/assets/72c5223f-74f9-4454-8478-961173e6c880" />
 
 [YouTube demo](https://youtube.com/shorts/5IbLTVlNvVM?si=wautAE7mvhscs9il)
 
