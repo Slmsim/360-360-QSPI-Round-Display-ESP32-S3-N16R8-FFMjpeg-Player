@@ -1,0 +1,10 @@
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+phy_init, data, phy,     0xF000,   0x1000,
+# App: 0.75 MiB (768 KiB). Recheck firmware size when adding features.
+factory,  app,  factory, 0x10000,  0xC0000,
+# 128 KiB unallocated gap from 0xD0000 to 0xF0000.
+# LittleFS: exactly 14.75 MiB. Re-upload LittleFS after changing this layout.
+spiffs,   data, spiffs,  0xF0000,  0xEC0000,
+# 256 KiB unallocated gap from 0xFB0000 to 0xFF0000.
+coredump, data, coredump,0xFF0000, 0x10000,

@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title id="pageTitle">실험판 · 360×360 MJPEG 변환기</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  :root { color-scheme: dark; --bg:#101315; --surface:#191e20; --border:#333e41; --text:#f1f5f3; --muted:#aab9b7; --accent:#c7fb98; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 Inter,system-ui,sans-serif; }
+  main { max-width:1000px; margin:auto; padding:clamp(26px,6vw,64px) 22px; }
+  .language-switch { display:flex; justify-content:flex-end; gap:8px; margin-bottom:18px; }
+  .language-switch button { width:auto; min-height:36px; padding:5px 11px; font-size:13px; }
+  .language-switch button[aria-pressed=true] { background:var(--accent); border-color:transparent; color:#142009; }
+  .eyebrow { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.15em; margin:0 0 13px; }
+  h1 { margin:0; font-size:clamp(29px,5vw,46px); line-height:1.15; letter-spacing:-.055em; }
+  .intro { color:var(--muted); margin:12px 0 28px; }
+  .workspace { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:32px; padding:clamp(18px,4vw,34px); border:1px solid var(--border); border-radius:24px; background:var(--surface); }
+  .viewer { display:flex; flex-direction:column; justify-content:center; gap:18px; min-width:0; }
+  .preview { width:100%; max-width:360px; aspect-ratio:1; margin:auto; display:grid; place-items:center; overflow:hidden; position:relative; border-radius:50%; border:1px solid #587164; background:radial-gradient(circle,#222d2b,#131b19 75%); }
+  .preview canvas { width:100%; height:100%; position:absolute; inset:0; }
+  .preview span { padding:18px; text-align:center; color:var(--muted); }
+  .preview-note { text-align:center; font-size:13px; color:var(--muted); margin:0; }
+  .timeline { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; font-size:13px; color:var(--muted); }
+  input[type=range] { width:100%; accent-color:var(--accent); margin:0; }
+  .check { display:flex; gap:9px; align-items:center; }
+  input[type=checkbox] { accent-color:var(--accent); }
+  fieldset { margin:0; padding:0; border:0; min-width:0; display:grid; gap:16px; }
+  .controls { display:grid; gap:16px; align-content:center; }
+  .field { display:grid; gap:6px; min-width:0; }
+  label,.label { font-weight:600; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .file-picker { display:flex; align-items:center; gap:10px; min-width:0; }
+  .file-picker button { width:auto; flex:0 0 auto; }
+  .file-picker span { min-width:0; overflow-wrap:anywhere; }
+  input[type=file],input[type=number],select,button,.download { width:100%; min-height:45px; border:1px solid var(--border); border-radius:10px; padding:9px 12px; font:inherit; }
+  input,select { background:#151a1c; color:var(--text); }
+  input[type=file] { font-size:13px; padding:10px; }
+  input[type=file]::file-selector-button { border:0; border-radius:5px; padding:5px 9px; margin-right:8px; background:#354448; color:var(--text); cursor:pointer; }
+  input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+  button,.download { border-color:transparent; background:var(--accent); color:#142009; cursor:pointer; font-weight:700; text-align:center; text-decoration:none; }
+  button:disabled { background:#394641; color:#bdc7c1; cursor:default; }
+  button.secondary { background:transparent; border-color:var(--border); color:var(--text); }
+  small,.muted,footer { color:var(--muted); font-size:13px; }
+  #sourceInfo { overflow-wrap:anywhere; }
+  .quality-label { display:flex; justify-content:space-between; }
+  output { color:var(--accent); }
+  #status { margin:0; min-height:1.5em; overflow-wrap:anywhere; font-size:14px; color:var(--muted); }
+  #status.error { color:#ffaea4; }
+  .estimate { padding:14px; border:1px solid var(--border); border-radius:12px; background:#151a1c; }
+  .estimate p { margin:6px 0 0; color:var(--muted); font-size:13px; }
+  .estimate.warning { border-color:#b59758; }
+  .estimate.over { border-color:#ce8076; }
+  progress { width:100%; height:8px; accent-color:var(--accent); display:block; }
+  .result { margin-top:20px; border:1px solid #587164; background:#18231c; padding:20px; border-radius:16px; display:grid; gap:12px; }
+  .result p { margin:0; }
+  #resultDetails { color:var(--muted); font-size:14px; }
+  code { color:var(--accent); font-size:13px; overflow-wrap:anywhere; }
+  .instructions { border-top:1px solid var(--border); margin-top:24px; padding-top:18px; }
+  .instructions p { margin:8px 0; }
+  footer { margin-top:18px; }
+  body.dragging .workspace { outline:2px dashed var(--accent); outline-offset:5px; }
+  #source { position:fixed; width:1px; height:1px; left:-10px; top:0; opacity:0; pointer-events:none; }
+  @media(max-width:680px) { .workspace { grid-template-columns:1fr; } .preview { max-width:300px; } main { padding-inline:16px; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="language-switch" aria-label="Language">
+    <button id="langKo" type="button" class="secondary" aria-pressed="false">🇰🇷 한국어</button>
+    <button id="langEn" type="button" class="secondary" aria-pressed="true">🇺🇸 English</button>
+  </nav>
+  <p class="eyebrow" data-i18n="eyebrow">ST77916 · VIDEO TOOL</p>
+  <h1 data-i18n="heading">360×360 MJPEG 변환기</h1>
+  <p class="intro" data-i18n="intro">MP4를 원형 LCD에 맞추고, 보드에서 재생할 영상으로 저장해.</p>
+  <div class="workspace">
+    <div class="viewer">
+      <div class="preview">
+        <span id="placeholder"><span data-i18n="placeholderSelect">영상을 선택하거나</span><br><span data-i18n="placeholderDrop">이 창으로 끌어다 놓아줘.</span></span>
+        <canvas id="preview" width="360" height="360" aria-label="원형 LCD 미리보기" data-i18n-aria="previewAria" hidden></canvas>
+      </div>
+      <p class="preview-note" data-i18n="previewNote">원형은 LCD 미리보기야. 저장되는 영상은 360×360 정사각형이야.</p>
+      <div class="timeline"><input id="scrub" type="range" min="0" max="1" step="0.001" value="0" aria-label="미리보기 위치" data-i18n-aria="scrubAria" disabled><span id="time">0.00초</span></div>
+      <p id="sourceInfo" class="muted" data-i18n="privacyNote">설치 없이 · 인터넷 없이 · 영상 업로드 없이</p>
+    </div>
+    <div class="controls">
+      <fieldset id="settings">
+        <div class="field">
+          <label for="upload" data-i18n="videoLabel">영상</label>
+          <div class="file-picker">
+            <input id="upload" type="file" accept="video/mp4,.mp4,.m4v,.mov,.webm,video/quicktime,video/webm" hidden>
+            <button id="chooseFile" type="button" class="secondary" aria-controls="upload" data-i18n="chooseFile">파일 선택</button>
+            <span id="fileName" class="muted" data-i18n="fileEmpty">선택된 파일 없음</span>
+          </div>
+          <small data-i18n="videoHint">MP4 권장 · 브라우저가 재생할 수 있는 영상</small>
+        </div>
+        <div class="field">
+          <label for="fit" data-i18n="fitLabel">프레임 맞추기</label>
+          <select id="fit"><option value="cover" data-i18n="fitCover">가운데 기준으로 화면 채우기</option><option value="contain" data-i18n="fitContain">영상 전체 보기 · 빈 공간은 검정</option></select>
+        </div>
+        <div class="row">
+          <div class="field"><div class="quality-label"><label for="fps" data-i18n="fpsLabel">프레임 속도</label><output id="fpsValue" for="fps">30 fps</output></div><input id="fps" type="range" min="1" max="45" step="1" value="30"><small data-i18n="fpsHint">1~45 FPS · 1 FPS 단위</small></div>
+          <div class="field"><div class="quality-label"><label for="quality" data-i18n="qualityLabel">JPEG 품질 상한</label><output id="qualityValue" for="quality">65%</output></div><input id="quality" type="range" min="20" max="95" step="1" value="65" style="min-height:45px"></div>
+        </div>
+        <div class="field">
+          <label class="check"><input id="lightweight" type="checkbox" checked><span data-i18n="lightweightLabel">보드용 가볍게 변환 (권장)</span></label>
+          <small data-i18n="lightweightHelp">JPEG 한 장은 최대 20KiB, 영상 전체는 7.2메가 목표에 맞추도록 품질을 자동 조절해. 메가는 1024 기준이야. 실제 캐시 할당 성공 여부와 FPS는 보드 시리얼에서 확인해줘.</small>
+        </div>
+        <div class="field">
+          <label class="check"><input id="roundMask" type="checkbox"><span data-i18n="roundMaskLabel">원형 화면 밖 검정 처리 (실험)</span></label>
+          <small data-i18n="roundMaskHelp">360×360 크기는 그대로 두고, 원형 LCD 밖의 모서리만 검정으로 바꿔. 가장자리에는 2픽셀 여유를 남겨. 효과를 비교하려면 같은 품질·FPS에서 시험해줘. 가볍게 변환은 남은 용량을 화질에 다시 쓸 수 있어.</small>
+        </div>
+        <div class="row">
+          <div class="field"><label for="start" data-i18n="startLabel">시작 (초)</label><input id="start" type="number" min="0" step="0.001" value="0" disabled></div>
+          <div class="field"><label for="end" data-i18n="endLabel">끝 (초)</label><input id="end" type="number" min="0" step="0.001" disabled></div>
+        </div>
+        <small data-i18n="settingsNote">용량을 줄이려면 품질·FPS를 낮추거나 구간을 짧게 잡아줘. 소리는 저장되지 않아.</small>
+      </fieldset>
+      <div id="estimateBox" class="estimate" role="status" aria-live="polite">
+        <strong id="estimateSummary" data-i18n="estimateSummaryEmpty">예상 용량 —</strong>
+        <p id="estimateDetails" data-i18n="estimateDetailsInitial">영상과 설정을 고르고 계산 버튼을 누르면 샘플을 분석해.</p>
+        <p id="fpsEstimate" data-i18n="fpsEstimateEmpty">예상 보드 처리 FPS —</p>
+        <p id="estimateAdvice" data-i18n="estimateAdviceInitial">예상치는 장면에 따라 달라질 수 있어. 변환 중 한도에 도달하면 완성된 구간을 저장해줘.</p>
+      </div>
+      <button id="estimate" type="button" class="secondary" disabled data-i18n="estimateButton">예상 용량·FPS 계산</button>
+      <button id="convert" type="button" disabled data-i18n="convertButton">MJPEG으로 변환</button>
+      <button id="cancel" type="button" class="secondary" hidden>변환 취소</button>
+      <progress id="progress" value="0" max="1" aria-label="변환 진행률" data-i18n-aria="progressAria" hidden></progress>
+      <p id="status" role="status" aria-live="polite" data-i18n="statusChoose">영상을 선택하면 시작할 수 있어.</p>
+    </div>
+  </div>
+  <section id="result" class="result" aria-label="변환 결과" data-i18n-aria="resultAria" hidden>
+    <p><strong id="resultTitle" data-i18n="resultTitleReady">보드에 넣을 영상이 준비됐어.</strong></p>
+    <p id="resultDetails"></p>
+    <p id="resultNote" class="muted"></p>
+    <a id="download" class="download" download="video.mjpeg" data-i18n="downloadButton">video.mjpeg 다운로드</a>
+    <p class="muted"><span data-i18n="resultFpsHint">스케치의 재생 속도도 맞춰줘: </span><code id="fpsCode"></code></p>
+  </section>
+  <div class="instructions muted">
+    <p data-i18n="instructionsSteps">① 영상 선택 → ② 설정 후 예상 용량 확인 → ③ 변환 후 다운로드</p>
+    <p data-i18n="instructionsEstimate">예상 용량과 FPS는 버튼을 눌렀을 때 선택 구간의 최대 16프레임을 샘플로 분석해 계산해. 설정이 바뀌면 결과가 초기화돼. FPS는 실측 데이터 두 개를 바탕으로 한 거친 추정이야. 용량 초과·오류·취소가 발생해도 완성된 프레임은 구간 영상으로 다운로드할 수 있어.</p>
+    <p><span data-i18n="instructionsUploadBefore">다운로드한 파일로 스케치 폴더의</span> <code>data/video.mjpeg</code> <span data-i18n="instructionsUploadAfter">를 교체하고 LittleFS 업로드를 실행해줘.</span></p>
+    <p data-i18n="instructionsCapacity">영상 변환 상한과 LittleFS 전체 크기는 각각 14.75메가야. 이 페이지에서 메가는 1024 기준이야. JPEG 한 장은 최대 128KiB야.</p>
+    <p data-i18n="instructionsMetadata">LittleFS 관리 정보도 공간을 쓰므로 실제 저장 가능한 영상은 14.75메가보다 조금 작아야 해.</p>
+    <p data-i18n="instructionsPlayback">새 재생기는 전체 캐시에 실패하면 앞부분을 캐시하고 나머지를 플래시에서 읽어.</p>
+  </div>
+  <footer data-i18n="footer">Photo Kit와 같은 브라우저 안의 변환 도구 · 영상과 변환 결과는 서버로 전송되지 않아.</footer>
+</main>
+<video id="source" muted playsinline preload="auto" aria-hidden="true"></video>
+<script>
+'use strict';
+const SIZE = 360;
+const FRAME_LIMIT = 128 * 1024;
+const FILE_LIMIT = 14.75 * 1024 * 1024; // Conversion limit; LittleFS metadata also consumes partition space.
+const CACHE_LIMIT = Math.floor(7.2 * 1024 * 1024);
+const LIGHT_FRAME_LIMIT = 20 * 1024;
+const ESTIMATE_SAMPLES = 16;
+const $ = id => document.getElementById(id);
+
+const TEXT = {
+  ko: {
+    pageTitle: '실험판 · 360×360 MJPEG 변환기',
+    eyebrow: 'ST77916 · VIDEO TOOL',
+    heading: '360×360 MJPEG 변환기',
+    intro: 'MP4를 원형 LCD에 맞추고, 보드에서 재생할 영상으로 저장해.',
+    placeholderSelect: '영상을 선택하거나',
+    placeholderDrop: '이 창으로 끌어다 놓아줘.',
+    previewAria: '원형 LCD 미리보기',
+    previewNote: '원형은 LCD 미리보기야. 저장되는 영상은 360×360 정사각형이야.',
+    scrubAria: '미리보기 위치',
+    privacyNote: '설치 없이 · 인터넷 없이 · 영상 업로드 없이',
+    videoLabel: '영상',
+    chooseFile: '파일 선택',
+    fileEmpty: '선택된 파일 없음',
+    videoHint: 'MP4 권장 · 브라우저가 재생할 수 있는 영상',
+    fitLabel: '프레임 맞추기',
+    fitCover: '가운데 기준으로 화면 채우기',
+    fitContain: '영상 전체 보기 · 빈 공간은 검정',
+    fpsLabel: '프레임 속도',
+    fpsHint: '1~45 FPS · 1 FPS 단위',
+    qualityLabel: 'JPEG 품질 상한',
+    lightweightLabel: '보드용 가볍게 변환 (권장)',
+    lightweightHelp: 'JPEG 한 장은 최대 20KiB, 영상 전체는 7.2 MiB 목표에 맞추도록 품질을 자동 조절해. MiB는 1024 기준이야. 실제 캐시 할당 성공 여부와 FPS는 보드 시리얼에서 확인해줘.',
+    roundMaskLabel: '원형 화면 밖 검정 처리 (실험)',
+    roundMaskHelp: '360×360 크기는 그대로 두고, 원형 LCD 밖의 모서리만 검정으로 바꿔. 가장자리에는 2픽셀 여유를 남겨. 효과를 비교하려면 같은 품질·FPS에서 시험해줘. 가볍게 변환은 남은 용량을 화질에 다시 쓸 수 있어.',
+    startLabel: '시작 (초)',
+    endLabel: '끝 (초)',
+    settingsNote: '용량을 줄이려면 품질·FPS를 낮추거나 구간을 짧게 잡아줘. 소리는 저장되지 않아.',
+    estimateSummaryEmpty: '예상 용량 —',
+    estimateDetailsInitial: '영상과 설정을 고르고 계산 버튼을 누르면 샘플을 분석해.',
+    fpsEstimateEmpty: '예상 보드 처리 FPS —',
+    estimateAdviceInitial: '예상치는 장면에 따라 달라질 수 있어. 변환 중 한도에 도달하면 완성된 구간을 저장해줘.',
+    estimateButton: '예상 용량·FPS 계산',
+    convertButton: 'MJPEG으로 변환',
+    cancelConvert: '변환 취소',
+    cancelEstimate: '예상 계산 취소',
+    progressAria: '변환 진행률',
+    statusChoose: '영상을 선택하면 시작할 수 있어.',
+    resultAria: '변환 결과',
+    resultTitleReady: '보드에 넣을 영상이 준비됐어.',
+    resultFpsHint: '스케치의 재생 속도도 맞춰줘: ',
+    downloadButton: 'video.mjpeg 다운로드',
+    instructionsSteps: '① 영상 선택 → ② 설정 후 예상 용량 확인 → ③ 변환 후 다운로드',
+    instructionsEstimate: '예상 용량과 FPS는 버튼을 눌렀을 때 선택 구간의 최대 16프레임을 샘플로 분석해 계산해. 설정이 바뀌면 결과가 초기화돼. FPS는 실측 데이터 두 개를 바탕으로 한 거친 추정이야. 용량 초과·오류·취소가 발생해도 완성된 프레임은 구간 영상으로 다운로드할 수 있어.',
+    instructionsUploadBefore: '다운로드한 파일로 스케치 폴더의',
+    instructionsUploadAfter: '를 교체하고 LittleFS 업로드를 실행해줘.',
+    instructionsCapacity: '영상 변환 상한과 LittleFS 파티션 크기는 각각 14.75 MiB야. 이 페이지에서 MiB는 1024 기준이야. JPEG 한 장은 최대 128 KiB야.',
+    instructionsMetadata: 'LittleFS 관리 정보도 공간을 쓰므로 실제 저장 가능한 영상은 14.75 MiB보다 조금 작아야 해.',
+    instructionsPlayback: '새 재생기는 전체 캐시에 실패하면 앞부분을 캐시하고 나머지를 플래시에서 읽어.',
+    footer: 'Photo Kit와 같은 브라우저 안의 변환 도구 · 영상과 변환 결과는 서버로 전송되지 않아.',
+    timeFormat: '{value}초',
+    sourceInfoFormat: '{name} · {width}×{height} · {duration}초',
+    statusReading: '영상을 읽는 중…',
+    statusReady: '준비됐어. 구간과 설정을 확인하고 변환을 눌러줘.',
+    errorReadVideo: '영상을 읽을 수 없어. H.264 MP4로 저장하거나 다른 브라우저에서 열어줘.',
+    errorReadTimeout: '영상 읽기가 지연됐어. 다른 MP4 파일로 다시 시도해줘.',
+    errorDuration: '영상 길이를 확인할 수 없어. 일반 MP4 파일로 다시 선택해줘.',
+    errorJpegEncode: '이 브라우저에서 JPEG를 만들 수 없어. Chrome에서 다시 열어줘.',
+    errorBoardBudget: '낮은 품질에서도 보드용 용량 목표를 넘었어. 변환 구간을 줄여줘. 고화질 파일이 필요하면 가볍게 변환을 끌 수 있어.',
+    errorJpegFormat: 'JPEG 프레임 형식을 확인할 수 없어. Chrome에서 다시 시도해줘.',
+    errorBaseJpeg: '보드용 기본 JPEG 형식이 아니야. Chrome에서 다시 시도해줘.',
+    errorJpegHeader: 'JPEG 헤더를 확인할 수 없어. 다른 브라우저에서 다시 시도해줘.',
+    errorRange: '시작과 끝을 확인해줘. 끝은 시작보다 커야 하고, 영상 길이 안에 있어야 해.',
+    errorSegmentLong: '구간이 너무 길어서 가벼운 영상으로 만들기 어려워. 구간을 줄이거나 가볍게 변환을 꺼줘.',
+    estimateAfterChange: '설정이 바뀌었어. 계산 버튼을 누르면 다시 분석해.',
+    estimateBeforeVideo: '영상을 선택한 뒤 계산 버튼을 누르면 분석해.',
+    estimateFpsIdle: '예상 보드 처리 FPS —',
+    estimateAdviceIdle: '최대 16프레임으로 추정하므로 실제 용량과 차이가 날 수 있어.',
+    estimateProcessing: '선택한 구간의 샘플 프레임을 분석하고 있어.',
+    estimateCalculating: '예상 용량 계산 중…',
+    estimateUnable: '예상 용량을 계산할 수 없어',
+    estimateCancelled: '예상 계산을 취소했어',
+    estimateCancelDetails: '다시 계산을 누르면 이어서 설정을 확인할 수 있어.',
+    errorSampleOversize: '샘플 JPEG가 128KiB를 넘었어. 품질을 낮춰줘.',
+    fpsPrediction: '예상 보드 최대 처리 속도 대략 {low}~{high} FPS · {cache}. 설정한 {fps} FPS가 재생 상한이야. 실측 2개 기반의 거친 추정이며 보드에서 확인해줘.{extra}',
+    cacheAssumptionFull: '전체 캐시 가정(할당 실패 시 달라짐)',
+    cacheAssumptionPrefix: '앞부분 캐시 + 플래시 가정',
+    fpsExtrapolation: ' 샘플 크기가 실측 범위 밖이라 오차가 더 클 수 있어.',
+    sizeEstimate: '예상 용량 약 {size} MiB / 상한 14.75 MiB',
+    sampleDetailsExact: '{samples} / {frames}프레임 샘플 · 평균 JPEG {mean}KiB · 전체 프레임을 샘플로 확인했어.',
+    sampleDetailsMargin: '{samples} / {frames}프레임 샘플 · 평균 JPEG {mean}KiB · 예상치에 20% 여유를 잡으면 {margin} MiB',
+    adviceOver: '이 설정은 한도 초과가 예상돼서 본 변환을 시작하지 않아. 품질·FPS를 낮추거나 구간을 약 {seconds}초 이하로 줄여줘. 장면에 따라 용량은 달라져.',
+    adviceClose: '예상 오차를 고려하면 한도에 가까워. 구간이나 품질을 조금 줄이는 게 좋아. 샘플 밖의 장면은 더 클 수 있고, LittleFS 관리 공간도 필요해.',
+    adviceLight: '가벼운 변환의 프레임별 용량 제한도 적용해서 계산했어. 샘플 밖 장면에서 목표를 맞추지 못하면 완성된 구간을 저장해줘.',
+    adviceNormal: '샘플 밖의 복잡한 장면 때문에 실제 용량은 달라질 수 있어. 한도에 도달하면 완성된 구간을 다운로드할 수 있어.',
+    estimateSampleProgress: '예상 용량 계산 · 샘플 {current} / {total}',
+    estimateOverStatus: '예상 용량이 한도를 넘어. 변환 전에 설정을 조절해줘.',
+    estimateDoneStatus: '예상 용량을 확인했어. 설정이 괜찮으면 변환을 눌러줘.',
+    frameOversize: '{frame}번째 JPEG가 128KiB를 넘었어. 품질을 낮춰서 다시 변환해줘.',
+    resultTitlePartial: '완성된 구간을 저장했어. 다운로드할 수 있어.',
+    downloadPartial: '완성된 구간 video.mjpeg 다운로드',
+    resultDetails: '{name} · 360×360 · {fps}fps · {frames}프레임 · {duration}초 · {size}MiB · 가장 큰 JPEG {largest}KiB · 품질 {low}~{high}%',
+    resultPartialNote: '원본 {start}~{next}초 구간이야. 나머지는 시작을 {resume}초로 설정해서 변환하면 돼.',
+    resultCompleteNote: '원본 {start}~{end}초 구간이야.',
+    convertEstimateOver: '예상 용량이 한도를 넘어. 품질·FPS·구간을 조절한 뒤 다시 계산해줘.',
+    sizeLimitReached: '변환 중 용량 한도에 도달했어.',
+    errorNoFrames: '저장할 프레임이 없어. 설정을 확인해줘.',
+    cacheMessageWithin: '변환 목표 7.2 MiB 이내야. 영상 캐시 할당 성공 여부와 실제 FPS는 보드 시리얼에서 확인해줘.',
+    cacheMessageBeyond: '캐시 상한 7.2 MiB를 넘어 앞부분 캐시와 플래시 읽기를 함께 써. 재생이 느리면 가볍게 변환을 켜고 구간을 줄여줘.',
+    conversionPartialDone: '{reason} 완성된 {frames}프레임을 구간 영상으로 저장했어. 아래에서 다운로드해줘.',
+    conversionDone: '변환 완료! {seconds}초 걸렸어. {cacheMessage}',
+    conversionCancelled: '변환을 취소했어.',
+    conversionPartialError: '{reason} 완성된 {frames}프레임은 아래에서 다운로드할 수 있어.',
+    conversionErrorNoFrames: '{reason} 이번 작업에서 완성된 프레임은 없어. 이전 다운로드 결과가 있으면 그대로 남겨뒀어.',
+    convertProgress: '{current} / {total}프레임 · {size}MiB · 약 {eta}초 남음',
+    cancelInProgress: '취소하는 중…'
+  },
+  en: {
+    pageTitle: 'Experimental · 360×360 MJPEG Converter',
+    eyebrow: 'ST77916 · VIDEO TOOL',
+    heading: '360×360 MJPEG Converter',
+    intro: 'Fit an MP4 for the round LCD and save a clip for playback on the board.',
+    placeholderSelect: 'Choose a video or',
+    placeholderDrop: 'drop it anywhere in this window.',
+    previewAria: 'Round LCD preview',
+    previewNote: 'The circle previews the LCD. The saved video is a 360×360 square.',
+    scrubAria: 'Preview position',
+    privacyNote: 'No installation · no internet · no video upload',
+    videoLabel: 'Video',
+    chooseFile: 'Choose video',
+    fileEmpty: 'No file selected',
+    videoHint: 'MP4 recommended · any format your browser can play',
+    fitLabel: 'Fit frame',
+    fitCover: 'Fill frame, centered',
+    fitContain: 'Show full video · black bars',
+    fpsLabel: 'Frame rate',
+    fpsHint: '1–45 FPS · 1 FPS increments',
+    qualityLabel: 'JPEG quality limit',
+    lightweightLabel: 'Optimize for the board (recommended)',
+    lightweightHelp: 'Automatically adjusts quality to target at most 20 KiB per JPEG and 7.2 MiB total. MiB uses 1024. Check actual cache allocation and FPS in the board Serial Monitor.',
+    roundMaskLabel: 'Black out corners outside the round display (experimental)',
+    roundMaskHelp: 'Keeps the 360×360 frame and blacks out only the corners outside the round LCD, leaving a 2-pixel margin at the edge. Compare at the same quality and FPS. Lightweight mode can use remaining space to improve quality.',
+    startLabel: 'Start (seconds)',
+    endLabel: 'End (seconds)',
+    settingsNote: 'To reduce file size, lower quality or FPS, or shorten the clip. Audio is not included.',
+    estimateSummaryEmpty: 'Estimated size —',
+    estimateDetailsInitial: 'Choose a video and settings, then estimate to analyze sample frames.',
+    fpsEstimateEmpty: 'Estimated board FPS —',
+    estimateAdviceInitial: 'The estimate varies by scene. If conversion reaches the size limit, save the completed portion.',
+    estimateButton: 'Estimate size and FPS',
+    convertButton: 'Convert to MJPEG',
+    cancelConvert: 'Cancel conversion',
+    cancelEstimate: 'Cancel estimate',
+    progressAria: 'Conversion progress',
+    statusChoose: 'Choose a video to get started.',
+    resultAria: 'Conversion result',
+    resultTitleReady: 'Your video is ready for the board.',
+    resultFpsHint: 'Set the playback rate in the sketch too: ',
+    downloadButton: 'Download video.mjpeg',
+    instructionsSteps: '1. Choose a video → 2. Set options and estimate size → 3. Convert and download',
+    instructionsEstimate: 'When you click Estimate, up to 16 frames from the selected range are sampled to estimate size and FPS. Changing settings clears the estimate. The FPS estimate is rough and based on two board measurements. If the size limit is reached, or conversion fails or is canceled, completed frames can still be downloaded as a partial clip.',
+    instructionsUploadBefore: 'Replace',
+    instructionsUploadAfter: 'in the sketch folder with the downloaded file, then upload the LittleFS image.',
+    instructionsCapacity: 'The conversion limit and LittleFS partition are each 14.75 MiB. MiB uses 1024. Each JPEG must be 128 KiB or smaller.',
+    instructionsMetadata: 'LittleFS metadata also uses space, so the usable video file must be slightly smaller than 14.75 MiB.',
+    instructionsPlayback: 'If full caching fails, the player caches a prefix and reads the rest from flash.',
+    footer: 'An in-browser tool, like Photo Kit · Your video and output stay on this device.',
+    timeFormat: '{value} s',
+    sourceInfoFormat: '{name} · {width}×{height} · {duration} s',
+    statusReading: 'Reading video…',
+    statusReady: 'Ready. Check the range and settings, then convert.',
+    errorReadVideo: 'Could not read this video. Save it as H.264 MP4 or try another browser.',
+    errorReadTimeout: 'Reading the video took too long. Try another MP4 file.',
+    errorDuration: 'Could not read the video duration. Select a standard MP4 file.',
+    errorJpegEncode: 'This browser could not create a JPEG. Try opening this page in Chrome.',
+    errorBoardBudget: 'The board-size target could not be met even at low quality. Shorten the clip. Turn off lightweight mode if you need a higher-quality file.',
+    errorJpegFormat: 'Could not validate the JPEG frame. Try again in Chrome.',
+    errorBaseJpeg: 'This is not a supported baseline JPEG for the board. Try again in Chrome.',
+    errorJpegHeader: 'Could not read the JPEG header. Try another browser.',
+    errorRange: 'Check the start and end times. End must be after start and within the video duration.',
+    errorSegmentLong: 'This range is too long for lightweight output. Shorten it or turn off lightweight mode.',
+    estimateAfterChange: 'Settings changed. Click Estimate to analyze again.',
+    estimateBeforeVideo: 'Choose a video, then click Estimate to analyze it.',
+    estimateFpsIdle: 'Estimated board FPS —',
+    estimateAdviceIdle: 'The estimate uses up to 16 frames, so actual size may differ.',
+    estimateProcessing: 'Analyzing sample frames from the selected range…',
+    estimateCalculating: 'Estimating size…',
+    estimateUnable: 'Could not estimate size',
+    estimateCancelled: 'Estimate canceled',
+    estimateCancelDetails: 'Click Estimate to review the settings and try again.',
+    errorSampleOversize: 'A sample JPEG exceeds 128 KiB. Lower the quality.',
+    fpsPrediction: 'Estimated peak board throughput: about {low}–{high} FPS · {cache}. The selected {fps} FPS is the playback cap. This rough estimate is based on two measurements; check the board for actual results.{extra}',
+    cacheAssumptionFull: 'assuming full cache (may differ if allocation fails)',
+    cacheAssumptionPrefix: 'assuming prefix cache plus flash reads',
+    fpsExtrapolation: ' Sample sizes are outside the measured range, so the estimate may be less accurate.',
+    sizeEstimate: 'Estimated size: {size} MiB / 14.75 MiB limit',
+    sampleDetailsExact: '{samples} / {frames} frames sampled · mean JPEG {mean} KiB · all frames were sampled.',
+    sampleDetailsMargin: '{samples} / {frames} frames sampled · mean JPEG {mean} KiB · estimate with 20% headroom: {margin} MiB',
+    adviceOver: 'This setup is estimated to exceed the limit, so conversion will not start. Lower quality or FPS, or shorten the clip to about {seconds} seconds or less. Results vary by scene.',
+    adviceClose: 'The estimate is close to the limit after accounting for uncertainty. Shorten the clip or lower quality. Unsampled scenes may be larger, and LittleFS needs some metadata space.',
+    adviceLight: 'The estimate also applies the per-frame size limit from lightweight mode. If unsampled scenes exceed the target, save the completed portion.',
+    adviceNormal: 'Actual size may vary because of complex unsampled scenes. If the limit is reached, you can download the completed portion.',
+    estimateSampleProgress: 'Estimating size · sample {current} / {total}',
+    estimateOverStatus: 'Estimated size exceeds the limit. Adjust the settings before converting.',
+    estimateDoneStatus: 'Estimate ready. If the settings look good, start conversion.',
+    frameOversize: 'JPEG frame {frame} exceeds 128 KiB. Lower the quality and convert again.',
+    resultTitlePartial: 'A completed portion is ready to download.',
+    downloadPartial: 'Download completed portion video.mjpeg',
+    resultDetails: '{name} · 360×360 · {fps} FPS · {frames} frames · {duration} s · {size} MiB · largest JPEG {largest} KiB · quality {low}–{high}%',
+    resultPartialNote: 'Source range: {start}–{next} s. To continue, set Start to {resume} s and convert the rest.',
+    resultCompleteNote: 'Source range: {start}–{end} s.',
+    convertEstimateOver: 'Estimated size exceeds the limit. Adjust quality, FPS, or range, then estimate again.',
+    sizeLimitReached: 'The size limit was reached during conversion.',
+    errorNoFrames: 'No frames were saved. Check the settings.',
+    cacheMessageWithin: 'This is within the 7.2 MiB cache target. Check cache allocation and actual FPS in the board Serial Monitor.',
+    cacheMessageBeyond: 'This exceeds the 7.2 MiB cache target, so playback uses prefix caching and flash reads. If playback is slow, enable lightweight mode and shorten the clip.',
+    conversionPartialDone: '{reason} Saved {frames} completed frames as a partial clip. Download it below.',
+    conversionDone: 'Conversion complete in {seconds} s. {cacheMessage}',
+    conversionCancelled: 'Conversion canceled.',
+    conversionPartialError: '{reason} {frames} completed frames are available to download below.',
+    conversionErrorNoFrames: '{reason} No frames were completed in this run. Any previous download is still available.',
+    convertProgress: '{current} / {total} frames · {size} MiB · about {eta} s left',
+    cancelInProgress: 'Canceling…'
+  }
+};
+let language = 'en';
+let busyMode = 'convert';
+let estimating = false;
+let lastPublished = null;
+let statusSource = 'statusChoose';
+let statusIsError = false;
+const koreanTextKeys = new Map();
+for (const [key, value] of Object.entries(TEXT.ko)) {
+  if (!koreanTextKeys.has(value)) koreanTextKeys.set(value, key);
+}
+function t(key, values = {}) {
+  const template = TEXT[language][key] || TEXT.ko[key] || String(key);
+  return template.replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : '');
+}
+function localized(source) {
+  if (typeof source === 'function') return source();
+  if (source instanceof Error) {
+    return source.uiKey ? t(source.uiKey, source.uiValues) : localized(source.message);
+  }
+  if (Object.prototype.hasOwnProperty.call(TEXT.ko, source)) return t(source);
+  const key = koreanTextKeys.get(source);
+  return key ? t(key) : source;
+}
+function uiError(key, values = {}) {
+  const error = new Error(t(key, values));
+  error.uiKey = key;
+  error.uiValues = values;
+  return error;
+}
+function formatTime(seconds) {
+  return t('timeFormat', { value: Number(seconds || 0).toFixed(2) });
+}
+function renderPublishedResult() {
+  if (!lastPublished) return;
+  const result = lastPublished;
+  $('resultTitle').textContent = t(result.partial ? 'resultTitlePartial' : 'resultTitleReady');
+  $('download').textContent = t(result.partial ? 'downloadPartial' : 'downloadButton');
+  $('fpsCode').textContent = 'constexpr uint32_t VIDEO_FPS = ' + result.fps + ';';
+  $('resultDetails').textContent = t('resultDetails', {
+    name: result.name,
+    fps: result.fps,
+    frames: result.frames,
+    duration: (result.frames / result.fps).toFixed(2),
+    size: (result.bytes / (1024 * 1024)).toFixed(2),
+    largest: (result.largest / 1024).toFixed(1),
+    low: Math.round(result.lowQuality * 100),
+    high: Math.round(result.quality * 100)
+  });
+  const nextStart = Math.min(result.end, result.start + result.frames / result.fps);
+  $('resultNote').textContent = t(result.partial ? 'resultPartialNote' : 'resultCompleteNote', {
+    start: result.start.toFixed(3),
+    next: nextStart.toFixed(3),
+    resume: nextStart.toFixed(6),
+    end: result.end.toFixed(3)
+  });
+  $('result').hidden = false;
+}
+function applyLanguage(nextLanguage) {
+  language = nextLanguage;
+  document.documentElement.lang = language;
+  document.title = t('pageTitle');
+  document.querySelectorAll('[data-i18n]').forEach(element => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach(element => {
+    element.setAttribute('aria-label', t(element.dataset.i18nAria));
+  });
+  $('langKo').setAttribute('aria-pressed', String(language === 'ko'));
+  $('langEn').setAttribute('aria-pressed', String(language === 'en'));
+  $('fpsValue').value = $('fps').value + ' fps';
+  $('qualityValue').value = $('quality').value + '%';
+  $('fileName').textContent = selectedFileName || t('fileEmpty');
+  $('time').textContent = formatTime(video.currentTime || 0);
+  if (loaded) {
+    $('sourceInfo').textContent = t('sourceInfoFormat', {
+      name: sourceName,
+      width: video.videoWidth,
+      height: video.videoHeight,
+      duration: video.duration.toFixed(2)
+    });
+  }
+  $('cancel').textContent = t(busyMode === 'estimate' ? 'cancelEstimate' : 'cancelConvert');
+  if (estimateResult) showEstimate(estimateResult);
+  else if (estimating) {
+    $('estimateSummary').textContent = t('estimateCalculating');
+    $('estimateDetails').textContent = t('estimateProcessing');
+    $('fpsEstimate').textContent = t('estimateFpsIdle');
+    $('estimateAdvice').textContent = t('estimateAdviceIdle');
+  } else invalidateEstimate();
+  if (lastPublished) renderPublishedResult();
+  $('status').textContent = localized(statusSource);
+  $('status').classList.toggle('error', statusIsError);
+}
+
+const video = $('source');
+const canvas = $('preview');
+const ctx = canvas.getContext('2d', { alpha: false });
+let sourceURL = null, sourceName = '', selectedFileName = '', resultURL = null, loaded = false, busy = false;
+let loadController = null, runController = null;
+let previewTask = Promise.resolve(), requestedPreview = null;
+let estimateResult = null;
+
+function status(message, error = false) {
+  statusSource = message;
+  statusIsError = error;
+  $('status').textContent = localized(message);
+  $('status').classList.toggle('error', error);
+}
+function clearResult() {
+  if (resultURL) URL.revokeObjectURL(resultURL);
+  resultURL = null;
+  lastPublished = null;
+  $('result').hidden = true;
+  $('download').removeAttribute('href');
+}
+function setBusy(value, mode = 'convert') {
+  busy = value;
+  busyMode = mode;
+  $('settings').disabled = value;
+  $('scrub').disabled = value || !loaded;
+  $('estimate').disabled = value || !loaded;
+  $('convert').disabled = value || !loaded;
+  $('cancel').hidden = !value;
+  $('cancel').disabled = false;
+  $('cancel').textContent = t(mode === 'estimate' ? 'cancelEstimate' : 'cancelConvert');
+  $('progress').hidden = !value;
+}
+function abortError() { return new DOMException('작업 취소', 'AbortError'); }
+function checkAbort(signal) { if (signal?.aborted) throw abortError(); }
+
+function mediaEvent(name, signal, action) {
+  return new Promise((resolve, reject) => {
+    const finish = error => {
+      clearTimeout(timer);
+      video.removeEventListener(name, done);
+      video.removeEventListener('error', fail);
+      signal?.removeEventListener('abort', aborted);
+      error ? reject(error) : resolve();
+    };
+    const done = () => finish();
+    const fail = () => finish(new Error('영상을 읽을 수 없어. H.264 MP4로 저장하거나 다른 브라우저에서 열어줘.'));
+    const aborted = () => finish(abortError());
+    const timer = setTimeout(() => finish(new Error('영상 읽기가 지연됐어. 다른 MP4 파일로 다시 시도해줘.')), 30000);
+    video.addEventListener(name, done, { once: true });
+    video.addEventListener('error', fail, { once: true });
+    signal?.addEventListener('abort', aborted, { once: true });
+    if (signal?.aborted) return aborted();
+    try { action?.(); } catch (error) { finish(error); }
+  });
+}
+async function seekTo(time, signal) {
+  checkAbort(signal);
+  // Assign currentTime instead of fastSeek: every output sample needs a precise seek.
+  if (video.readyState >= 2 && !video.seeking && Math.abs(video.currentTime - time) < 0.000001) return;
+  await mediaEvent('seeked', signal, () => { video.currentTime = time; });
+  checkAbort(signal);
+  if (video.readyState < 2) await mediaEvent('loadeddata', signal);
+}
+function drawFrame() {
+  const scale = ($('fit').value === 'cover' ? Math.max : Math.min)(SIZE / video.videoWidth, SIZE / video.videoHeight);
+  const width = video.videoWidth * scale, height = video.videoHeight * scale;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  const masked = $('roundMask').checked;
+  if (masked) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 + 2, 0, Math.PI * 2);
+    ctx.clip();
+  }
+  try {
+    ctx.drawImage(video, (SIZE - width) / 2, (SIZE - height) / 2, width, height);
+  } finally {
+    if (masked) ctx.restore();
+  }
+  $('placeholder').hidden = true;
+  canvas.hidden = false;
+  $('scrub').value = video.currentTime;
+  $('time').textContent = formatTime(video.currentTime);
+}
+function previewAt(time) {
+  if (!loaded || busy) return;
+  requestedPreview = Math.max(0, Math.min(time, Math.max(0, video.duration - 0.001)));
+  // Serialize seeks; a fast drag only queues the most recent requested position.
+  previewTask = previewTask.catch(() => {}).then(async () => {
+    while (requestedPreview !== null && loaded && !busy) {
+      const target = requestedPreview;
+      requestedPreview = null;
+      await seekTo(target, loadController.signal);
+      drawFrame();
+    }
+  });
+  previewTask.catch(error => { if (error.name !== 'AbortError') status(error.message, true); });
+}
+async function loadVideo(file) {
+  if (!file || busy) return;
+  selectedFileName = file.name;
+  $('fileName').textContent = selectedFileName;
+  loadController?.abort();
+  const controller = new AbortController();
+  loadController = controller;
+  loaded = false;
+  requestedPreview = null;
+  invalidateEstimate();
+  setBusy(false);
+  canvas.hidden = true;
+  $('placeholder').hidden = false;
+  $('start').disabled = $('end').disabled = true;
+  $('sourceInfo').textContent = file.name;
+  sourceName = file.name;
+  status('statusReading');
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  if (sourceURL) URL.revokeObjectURL(sourceURL);
+  sourceURL = URL.createObjectURL(file);
+  try {
+    await mediaEvent('loadedmetadata', controller.signal, () => { video.src = sourceURL; video.load(); });
+    if (video.readyState < 2) await mediaEvent('loadeddata', controller.signal);
+    checkAbort(controller.signal);
+    if (!Number.isFinite(video.duration) || video.duration <= 0 || !video.videoWidth || !video.videoHeight) throw new Error('영상 길이를 확인할 수 없어. 일반 MP4 파일로 다시 선택해줘.');
+    loaded = true;
+    $('start').disabled = $('end').disabled = false;
+    $('start').value = '0';
+    $('end').value = video.duration.toFixed(3);
+    $('start').max = $('end').max = String(video.duration);
+    $('scrub').max = String(Math.max(0, video.duration - 0.001));
+    $('sourceInfo').textContent = t('sourceInfoFormat', {
+      name: file.name, width: video.videoWidth, height: video.videoHeight,
+      duration: video.duration.toFixed(2)
+    });
+    drawFrame();
+    setBusy(false);
+    status('statusReady');
+  } catch (error) {
+    if (controller !== loadController || error.name === 'AbortError') return;
+    status(error.message, true);
+    setBusy(false);
+  }
+}
+function encodeJPEG(quality) {
+  return new Promise((resolve, reject) => canvas.toBlob(blob => {
+    if (!blob || blob.type !== 'image/jpeg') reject(new Error('이 브라우저에서 JPEG를 만들 수 없어. Chrome에서 다시 열어줘.'));
+    else resolve(blob);
+  }, 'image/jpeg', quality));
+}
+async function encodeFrame(quality, budget, signal) {
+  const first = await encodeJPEG(quality);
+  checkAbort(signal);
+  if (!budget || first.size <= budget) return { blob: first, quality };
+  let low = 0.10, high = quality;
+  let best = await encodeJPEG(low), bestQuality = low;
+  checkAbort(signal);
+  if (best.size > budget) throw new Error('낮은 품질에서도 보드용 용량 목표를 넘었어. 변환 구간을 줄여줘. 고화질 파일이 필요하면 가볍게 변환을 끌 수 있어.');
+  // Keep the best known fitting JPEG; the browser controls its quality scale.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidateQuality = (low + high) / 2;
+    const candidate = await encodeJPEG(candidateQuality);
+    checkAbort(signal);
+    if (candidate.size <= budget) {
+      best = candidate;
+      bestQuality = candidateQuality;
+      low = candidateQuality;
+    } else high = candidateQuality;
+  }
+  return { blob: best, quality: bestQuality };
+}
+function validateJPEG(bytes) {
+  // Reject progressive/non-JPEG encoders instead of downloading unusable frames.
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9) throw new Error('JPEG 프레임 형식을 확인할 수 없어. Chrome에서 다시 시도해줘.');
+  let offset = 2;
+  while (offset + 3 < bytes.length) {
+    if (bytes[offset++] !== 0xff) break;
+    while (bytes[offset] === 0xff) offset++;
+    const marker = bytes[offset++];
+    if (marker === 0xda || marker === 0xd9) break;
+    const length = (bytes[offset] << 8) | bytes[offset + 1];
+    if (length < 2 || offset + length > bytes.length) break;
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      if (marker !== 0xc0 || bytes[offset + 2] !== 8 || width !== SIZE || height !== SIZE) throw new Error('보드용 기본 JPEG 형식이 아니야. Chrome에서 다시 시도해줘.');
+      return;
+    }
+    offset += length;
+  }
+  throw new Error('JPEG 헤더를 확인할 수 없어. 다른 브라우저에서 다시 시도해줘.');
+}
+function readConfiguration() {
+  const start = Number($('start').value), end = Math.min(Number($('end').value), video.duration);
+  if ($('start').value === '' || $('end').value === '' || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || start >= video.duration) {
+    throw new Error('시작과 끝을 확인해줘. 끝은 시작보다 커야 하고, 영상 길이 안에 있어야 해.');
+  }
+  const fps = Number($('fps').value), quality = Number($('quality').value) / 100;
+  const frameCount = Math.max(1, Math.ceil((end - start) * fps - 1e-7));
+  const lightweight = $('lightweight').checked;
+  const frameBudget = lightweight ? Math.min(LIGHT_FRAME_LIMIT, Math.floor(CACHE_LIMIT / frameCount)) : 0;
+  if (lightweight && frameBudget < 2048) {
+    throw new Error('구간이 너무 길어서 가벼운 영상으로 만들기 어려워. 구간을 줄이거나 가볍게 변환을 꺼줘.');
+  }
+  const fit = $('fit').value;
+  const roundMask = $('roundMask').checked;
+  const key = JSON.stringify([sourceURL, start, end, fps, quality, lightweight, fit, roundMask]);
+  return { start, end, fps, quality, frameCount, lightweight, frameBudget, fit, roundMask, key, sourceName };
+}
+function invalidateEstimate() {
+  estimateResult = null;
+  $('estimateBox').classList.remove('warning', 'over');
+  $('estimateSummary').textContent = t('estimateSummaryEmpty');
+  $('estimateDetails').textContent = t(loaded ? 'estimateAfterChange' : 'estimateBeforeVideo');
+  $('fpsEstimate').textContent = t('estimateFpsIdle');
+  $('estimateAdvice').textContent = t('estimateAdviceIdle');
+}
+// Very rough model calibrated only to two measured 360x360 S3 workloads:
+// ~27.4 KiB/frame at 26.85 fps (full cache), ~76 KiB/frame at 14.12 fps
+// (6 MiB prefix plus synchronous flash tail). JPEG size is not decode cost.
+function estimatePlayback(value) {
+  const kib = value.meanBytes / 1024;
+  const fullCache = value.estimatedBytes <= CACHE_LIMIT;
+  const cacheRatio = Math.min(1, (6 * 1024 * 1024) / value.estimatedBytes);
+  const interval = 27.2 + 0.365 * kib + (fullCache ? 0 : 22.7 * (1 - cacheRatio));
+  const center = Math.min(40, 1000 / interval);
+  return { low: Math.max(1, center * 0.75), high: Math.min(40, center * 1.25),
+           fullCache, extrapolated: kib < 27 || kib > 77 };
+}
+function showEstimate(value) {
+  const mib = 1024 * 1024;
+  const over = value.estimatedBytes > FILE_LIMIT;
+  const close = !over && value.marginBytes > FILE_LIMIT;
+  const prediction = estimatePlayback(value);
+  $('fpsEstimate').textContent = t('fpsPrediction', {
+    low: prediction.low.toFixed(0), high: prediction.high.toFixed(0),
+    cache: t(prediction.fullCache ? 'cacheAssumptionFull' : 'cacheAssumptionPrefix'),
+    fps: value.fps,
+    extra: prediction.extrapolated ? t('fpsExtrapolation') : ''
+  });
+  $('estimateBox').classList.toggle('over', over);
+  $('estimateBox').classList.toggle('warning', close);
+  $('estimateSummary').textContent = t('sizeEstimate', {
+    size: (value.estimatedBytes / mib).toFixed(2)
+  });
+  $('estimateDetails').textContent = t(value.exact ? 'sampleDetailsExact' : 'sampleDetailsMargin', {
+    samples: value.sampleCount, frames: value.frameCount,
+    mean: (value.meanBytes / 1024).toFixed(1),
+    margin: (value.marginBytes / mib).toFixed(2)
+  });
+  if (over) {
+    const safeSeconds = Math.floor(FILE_LIMIT / (value.meanBytes * 1.2)) / value.fps;
+    $('estimateAdvice').textContent = t('adviceOver', { seconds: safeSeconds.toFixed(1) });
+  } else if (close) {
+    $('estimateAdvice').textContent = t('adviceClose');
+  } else {
+    $('estimateAdvice').textContent = t(value.lightweight ? 'adviceLight' : 'adviceNormal');
+  }
+}
+async function estimateSize() {
+  if (!loaded || busy) return null;
+  let config;
+  try { config = readConfiguration(); }
+  catch (error) {
+    $('estimateSummary').textContent = t('estimateUnable');
+    $('estimateDetails').textContent = localized(error);
+    status(error, true);
+    return null;
+  }
+  const controller = new AbortController();
+  runController = controller;
+  estimating = true;
+  setBusy(true, 'estimate');
+  requestedPreview = null;
+  const sampleCount = Math.min(ESTIMATE_SAMPLES, config.frameCount);
+  const sampleIndices = Array.from({ length: sampleCount }, (_, i) =>
+    sampleCount === 1 ? 0 : Math.round(i * (config.frameCount - 1) / (sampleCount - 1)));
+  let sampleBytes = 0;
+  $('progress').max = sampleCount;
+  $('progress').value = 0;
+  $('estimateBox').classList.remove('warning', 'over');
+  $('estimateSummary').textContent = t('estimateCalculating');
+  $('estimateDetails').textContent = t('estimateProcessing');
+  try {
+    await previewTask.catch(() => {});
+    for (let i = 0; i < sampleIndices.length; i++) {
+      checkAbort(controller.signal);
+      await seekTo(config.start + sampleIndices[i] / config.fps, controller.signal);
+      drawFrame();
+      const { blob } = await encodeFrame(config.quality, config.frameBudget, controller.signal);
+      if (blob.size > FRAME_LIMIT) throw uiError('errorSampleOversize');
+      validateJPEG(new Uint8Array(await blob.arrayBuffer()));
+      checkAbort(controller.signal);
+      sampleBytes += blob.size;
+      $('progress').value = i + 1;
+      status(() => t('estimateSampleProgress', { current: i + 1, total: sampleCount }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    checkAbort(controller.signal);
+    const meanBytes = sampleBytes / sampleCount;
+    const estimatedBytes = meanBytes * config.frameCount;
+    estimateResult = { ...config, sampleCount, meanBytes, estimatedBytes,
+      exact: sampleCount === config.frameCount,
+      marginBytes: estimatedBytes * (sampleCount === config.frameCount ? 1 : 1.2) };
+    showEstimate(estimateResult);
+    status(estimatedBytes > FILE_LIMIT ? 'estimateOverStatus' : 'estimateDoneStatus', estimatedBytes > FILE_LIMIT);
+    return estimateResult;
+  } catch (error) {
+    estimateResult = null;
+    $('fpsEstimate').textContent = t('estimateFpsIdle');
+    $('estimateSummary').textContent = t(error.name === 'AbortError' ? 'estimateCancelled' : 'estimateUnable');
+    $('estimateDetails').textContent = error.name === 'AbortError' ? t('estimateCancelDetails') : localized(error);
+    status(error.name === 'AbortError' ? 'estimateCancelled' : error, error.name !== 'AbortError');
+    return null;
+  } finally {
+    runController = null;
+    estimating = false;
+    setBusy(false);
+  }
+}
+function publishResult(frames, config, totalBytes, largest, lowestQuality, partial) {
+  const result = new Blob(frames, { type: 'application/octet-stream' });
+  const nextURL = URL.createObjectURL(result);
+  clearResult();
+  resultURL = nextURL;
+  $('download').href = resultURL;
+  lastPublished = {
+    partial, name: config.sourceName, fps: config.fps, frames: frames.length,
+    bytes: totalBytes, largest, lowQuality: lowestQuality, quality: config.quality,
+    start: config.start, end: config.end
+  };
+  renderPublishedResult();
+}
+async function convert() {
+  if (!loaded || busy) return;
+  let config;
+  try { config = readConfiguration(); }
+  catch (error) { status(error, true); return; }
+  const estimate = estimateResult?.key === config.key ? estimateResult : null;
+  if (estimate && estimate.estimatedBytes > FILE_LIMIT) {
+    status('convertEstimateOver', true);
+    return;
+  }
+  const { start, end, fps, quality, frameCount, frameBudget } = config;
+  const controller = new AbortController();
+  runController = controller;
+  setBusy(true);
+  requestedPreview = null;
+  $('progress').value = 0;
+  $('progress').max = frameCount;
+  const frames = [];
+  let totalBytes = 0, largest = 0, lowestQuality = quality;
+  const startedAt = performance.now();
+  let stoppedReason = false;
+  try {
+    await previewTask.catch(() => {});
+    for (let i = 0; i < frameCount; i++) {
+      checkAbort(controller.signal);
+      await seekTo(start + i / fps, controller.signal);
+      drawFrame();
+      const encoded = await encodeFrame(quality, frameBudget, controller.signal);
+      const blob = encoded.blob;
+      checkAbort(controller.signal);
+      if (blob.size > FRAME_LIMIT) throw uiError('frameOversize', { frame: i + 1 });
+      if (totalBytes + blob.size > FILE_LIMIT) {
+        stoppedReason = true;
+        break;
+      }
+      validateJPEG(new Uint8Array(await blob.arrayBuffer()));
+      checkAbort(controller.signal);
+      frames.push(blob);
+      lowestQuality = Math.min(lowestQuality, encoded.quality);
+      totalBytes += blob.size;
+      largest = Math.max(largest, blob.size);
+      $('progress').value = i + 1;
+      const elapsed = (performance.now() - startedAt) / 1000;
+      const eta = Math.ceil(elapsed / (i + 1) * (frameCount - i - 1));
+      status(() => t('convertProgress', {
+        current: i + 1,
+        total: frameCount,
+        size: (totalBytes / (1024 * 1024)).toFixed(2),
+        eta
+      }));
+      // Yield even when seeks/encoding resolve quickly, so cancel remains usable.
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    checkAbort(controller.signal);
+    if (!frames.length) {
+      if (stoppedReason) throw uiError('sizeLimitReached');
+      throw uiError('errorNoFrames');
+    }
+    publishResult(frames, config, totalBytes, largest, lowestQuality, stoppedReason);
+    const cacheKey = totalBytes <= CACHE_LIMIT ? 'cacheMessageWithin' : 'cacheMessageBeyond';
+    status(() => stoppedReason
+      ? t('conversionPartialDone', { reason: t('sizeLimitReached'), frames: frames.length })
+      : t('conversionDone', {
+          seconds: ((performance.now() - startedAt) / 1000).toFixed(1),
+          cacheMessage: t(cacheKey)
+        }));
+  } catch (error) {
+    const reasonSource = error.name === 'AbortError' ? 'conversionCancelled' : error;
+    if (frames.length) {
+      publishResult(frames, config, totalBytes, largest, lowestQuality, true);
+      status(() => t('conversionPartialError', {
+        reason: localized(reasonSource), frames: frames.length
+      }), error.name !== 'AbortError');
+    } else {
+      status(() => t('conversionErrorNoFrames', {
+        reason: localized(reasonSource)
+      }), error.name !== 'AbortError');
+    }
+  } finally {
+    frames.length = 0;
+    runController = null;
+    setBusy(false);
+  }
+}
+$('chooseFile').addEventListener('click', () => $('upload').click());
+$('upload').addEventListener('change', () => loadVideo($('upload').files[0]));
+$('estimate').addEventListener('click', estimateSize);
+$('convert').addEventListener('click', convert);
+$('cancel').addEventListener('click', () => { runController?.abort(); $('cancel').disabled = true; status('cancelInProgress'); });
+$('langKo').addEventListener('click', () => applyLanguage('ko'));
+$('langEn').addEventListener('click', () => applyLanguage('en'));
+$('scrub').addEventListener('input', () => previewAt(Number($('scrub').value)));
+$('settings').addEventListener('input', event => {
+  if (event.target === $('upload')) return;
+  invalidateEstimate();
+  $('fpsValue').value = $('fps').value + ' fps';
+  $('qualityValue').value = $('quality').value + '%';
+  if (loaded && (event.target === $('fit') || event.target === $('roundMask'))) drawFrame();
+  if (event.target === $('start')) previewAt(Number($('start').value));
+});
+for (const event of ['dragenter', 'dragover']) document.addEventListener(event, e => { e.preventDefault(); if (!busy) document.body.classList.add('dragging'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+document.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); loadVideo(e.dataTransfer.files[0]); });
+window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+applyLanguage(language);
+</script>
+<script src="MacConverter.js"></script></body>
+</html>
