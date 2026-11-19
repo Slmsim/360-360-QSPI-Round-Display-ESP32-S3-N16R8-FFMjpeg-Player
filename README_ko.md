@@ -7,6 +7,10 @@
 # ST77916 360×360 원형 디스플레이 MJPEG 플레이어
 
 ESP32-S3 N16R8에서 ST77916 QSPI 원형 디스플레이로 360×360 MJPEG 영상을 재생하는 펌웨어입니다. 이 폴더에는 현재 O3 배포용 스케치, 예제 영상, macOS 컨버터 앱이 들어 있습니다.
+<img width="1125" height="2436" alt="IMG_4B28A8A888C6-1" src="https://github.com/user-attachments/assets/72c5223f-74f9-4454-8478-961173e6c880" />
+
+[YouTube demo](https://youtube.com/shorts/5IbLTVlNvVM?si=wautAE7mvhscs9il)
+
 
 ## 포함된 기능
 
