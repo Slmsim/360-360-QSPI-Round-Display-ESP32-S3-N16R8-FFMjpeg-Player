@@ -7,7 +7,8 @@
 # ST77916 360×360 Round Display MJPEG Player
 
 An ESP32-S3 N16R8 firmware project for playing 360×360 MJPEG video on an ST77916 QSPI round display. This folder contains the current O3 release sketch, an example video, and a macOS converter app.
-
+<img width="1125" height="2436" alt="IMG_4B28A8A888C6-1" src="https://github.com/user-attachments/assets/72c5223f-74f9-4454-8478-961173e6c880" />
+[YouTube demo](https://youtube.com/shorts/5IbLTVlNvVM?si=wautAE7mvhscs9il)
 ## What is included
 
 - Dual-core JPEG decoding with three RGB565 frame buffers, so decoding and display transfer can overlap.
