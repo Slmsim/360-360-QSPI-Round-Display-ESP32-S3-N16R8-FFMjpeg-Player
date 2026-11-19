@@ -18,7 +18,7 @@ An ESP32-S3 N16R8 firmware project for playing 360×360 MJPEG video on an ST7791
 - An ESP32-S3 SIMD `rows2` IDCT path, enabled by default, with a scalar fallback for unsupported blocks or targets.
 - Circular-display optimizations: fully out-of-circle MCUs are skipped, and decoded pixels outside the circle are omitted from the PSRAM copy. Edge MCUs that intersect the circle are still decoded.
 - Automatic PSRAM caching: the firmware caches the complete compressed video when it fits within its 7.2 MiB target; otherwise it caches a prefix and reads remaining frames from LittleFS.
-- `ST77916 MJPEG Converter.app`, a macOS app that uses FFmpeg to create the board-ready MJPEG file. Use the app instead of the older browser HTML converter.
+- `ST77916 MJPEG Converter.app`, a macOS app that uses FFmpeg to create the board-ready MJPEG file. 
 
 These optimizations reduce software work and buffering overhead; they do not guarantee a fixed frame rate. In board tests, playback reached about **50 FPS** on the test clip. The sketch's `VIDEO_FPS` setting is a 60 FPS upper limit, not a promise that every video will reach 60 FPS. Results depend on scene complexity, JPEG quality, cache mode, and the board.
 
